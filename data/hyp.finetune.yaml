@@ -19,6 +19,7 @@ box: 0.0296
 cls: 0.243
 cls_pw: 0.631
 obj: 0.301
+landmark: 1
 obj_pw: 0.911
 iou_t: 0.2
 anchor_t: 2.91
