@@ -43,7 +43,7 @@ except ImportError:
     logger.info("Install Weights & Biases for experiment logging via 'pip install wandb' (recommended)")
 
 
-def train(hyp, opt, device, tb_writer=None, wandb=None):
+def train(hyp, opt, device, tb_writer=None, wandb=None, n_landmarks=5):
     logger.info(f'Hyperparameters {hyp}')
     save_dir, epochs, batch_size, total_batch_size, weights, rank = \
         Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank
@@ -287,7 +287,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
             # Forward
             with amp.autocast(enabled=cuda):
                 pred = model(imgs)  # forward
-                loss, loss_items = compute_loss(pred, targets.to(device), model)  # loss scaled by batch_size
+                loss, loss_items = compute_loss(pred, targets.to(device), model, n_landmarks)  # loss scaled by batch_size
                 if rank != -1:
                     loss *= opt.world_size  # gradient averaged between devices in DDP mode
 
@@ -458,6 +458,7 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/train', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument('--n_landmarks', type=int, default=5, help='number of landmarks we want to detect in each face')
     opt = parser.parse_args()
 
     # Set DDP variables
@@ -583,7 +584,7 @@ if __name__ == '__main__':
                 hyp[k] = round(hyp[k], 5)  # significant digits
 
             # Train mutation
-            results = train(hyp.copy(), opt, device, wandb=wandb)
+            results = train(hyp.copy(), opt, device, wandb=wandb, n_landmarks=opt.n_landmarks)
 
             # Write mutation results
             print_mutation(hyp.copy(), results, yaml_file, opt.bucket)

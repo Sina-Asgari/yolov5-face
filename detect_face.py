@@ -1,7 +1,9 @@
 # -*- coding: UTF-8 -*-
 import argparse
+from pyexpat import model
 import time
 from pathlib import Path
+from tkinter import N
 
 import cv2
 import torch
@@ -30,24 +32,30 @@ def scale_coords_landmarks(img1_shape, coords, img0_shape, ratio_pad=None):
     else:
         gain = ratio_pad[0][0]
         pad = ratio_pad[1]
-
-    coords[:, [0, 2, 4, 6, 8]] -= pad[0]  # x padding
-    coords[:, [1, 3, 5, 7, 9]] -= pad[1]  # y padding
-    coords[:, :10] /= gain
+    
+    n_landmarks = coords.shape[1] // 2
+    
+    coords[:, [i for i in range(0, n_landmarks*2, 2)]] -= pad[0]  # x padding
+    coords[:, [i for i in range(1, n_landmarks*2 + 1, 2)]] -= pad[1]  # y padding
+    coords[:, :n_landmarks * 2] /= gain
     #clip_coords(coords, img0_shape)
-    coords[:, 0].clamp_(0, img0_shape[1])  # x1
-    coords[:, 1].clamp_(0, img0_shape[0])  # y1
-    coords[:, 2].clamp_(0, img0_shape[1])  # x2
-    coords[:, 3].clamp_(0, img0_shape[0])  # y2
-    coords[:, 4].clamp_(0, img0_shape[1])  # x3
-    coords[:, 5].clamp_(0, img0_shape[0])  # y3
-    coords[:, 6].clamp_(0, img0_shape[1])  # x4
-    coords[:, 7].clamp_(0, img0_shape[0])  # y4
-    coords[:, 8].clamp_(0, img0_shape[1])  # x5
-    coords[:, 9].clamp_(0, img0_shape[0])  # y5
+    for i in range(n_landmarks * 2):
+        coords[:, i].clamp_(0, img0_shape[(i+1)%2])  # x1   
+
+    # coords[:, 0].clamp_(0, img0_shape[1])  # x1
+    # coords[:, 1].clamp_(0, img0_shape[0])  # y1
+    # coords[:, 2].clamp_(0, img0_shape[1])  # x2
+    # coords[:, 3].clamp_(0, img0_shape[0])  # y2
+    # coords[:, 4].clamp_(0, img0_shape[1])  # x3
+    # coords[:, 5].clamp_(0, img0_shape[0])  # y3
+    # coords[:, 6].clamp_(0, img0_shape[1])  # x4
+    # coords[:, 7].clamp_(0, img0_shape[0])  # y4
+    # coords[:, 8].clamp_(0, img0_shape[1])  # x5
+    # coords[:, 9].clamp_(0, img0_shape[0])  # y5
     return coords
 
 def show_results(img, xyxy, conf, landmarks, class_num):
+    n_landmarks = len(landmarks) // 2
     h,w,c = img.shape
     tl = 1 or round(0.002 * (h + w) / 2) + 1  # line/font thickness
     x1 = int(xyxy[0])
@@ -56,12 +64,13 @@ def show_results(img, xyxy, conf, landmarks, class_num):
     y2 = int(xyxy[3])
     cv2.rectangle(img, (x1,y1), (x2, y2), (0,255,0), thickness=tl, lineType=cv2.LINE_AA)
 
-    clors = [(255,0,0),(0,255,0),(0,0,255),(255,255,0),(0,255,255)]
 
-    for i in range(5):
+    for i in range(n_landmarks):
         point_x = int(landmarks[2 * i])
         point_y = int(landmarks[2 * i + 1])
-        cv2.circle(img, (point_x, point_y), tl+1, clors[i], -1)
+        color = random.randint(0, 255, size=3)
+        color = ( int (color [ 0 ]), int (color [ 1 ]), int (color [ 2 ])) 
+        cv2.circle(img, (point_x, point_y), tl+1, color, -1)
 
     tf = max(tl - 1, 1)  # font thickness
     label = str(conf)[:5]
@@ -70,7 +79,7 @@ def show_results(img, xyxy, conf, landmarks, class_num):
 
 
 
-def detect_one(model, image_path, device):
+def detect_one(model, image_path, device, n_landmarks=5):
     # Load model
     img_size = 800
     conf_thres = 0.3
@@ -105,7 +114,7 @@ def detect_one(model, image_path, device):
     pred = model(img)[0]
 
     # Apply NMS
-    pred = non_max_suppression_face(pred, conf_thres, iou_thres)
+    pred = non_max_suppression_face(pred, conf_thres, iou_thres, n_landmarks=n_landmarks)
 
     print('img.shape: ', img.shape)
     print('orgimg.shape: ', orgimg.shape)
@@ -120,13 +129,13 @@ def detect_one(model, image_path, device):
             for c in det[:, -1].unique():
                 n = (det[:, -1] == c).sum()  # detections per class
 
-            det[:, 5:15] = scale_coords_landmarks(img.shape[2:], det[:, 5:15], orgimg.shape).round()
+            det[:, 5:5+n_landmarks*2] = scale_coords_landmarks(img.shape[2:], det[:, 5:5+n_landmarks*2], orgimg.shape).round()
 
             for j in range(det.size()[0]):
                 xyxy = det[j, :4].view(-1).tolist()
                 conf = det[j, 4].cpu().numpy()
-                landmarks = det[j, 5:15].view(-1).tolist()
-                class_num = det[j, 15].cpu().numpy()
+                landmarks = det[j, 5:5+n_landmarks*2].view(-1).tolist()
+                class_num = det[j, 5+n_landmarks*2].cpu().numpy()
                 orgimg = show_results(orgimg, xyxy, conf, landmarks, class_num)
 
     cv2.imwrite('result.jpg', orgimg)
@@ -143,4 +152,25 @@ if __name__ == '__main__':
     print(opt)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(opt.weights, device)
-    detect_one(model, opt.image, device)
+    detect_one(model, opt.image, device, n_landmarks=5)
+
+    from models.yolo import Model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model2 = Model(cfg='models/yolov5s.yaml', ch=3, nc=1, n_landmarks=10).to(device)
+    # image = "./data/images/bus.jpg"
+    # detect_one(model, image, device, n_landmarks=10)
+
+
+    # for copy wights except Detect    
+    params1 = model.named_parameters()
+    params2 = model2.named_parameters()
+
+    dict_params2 = dict(params2)
+
+    for name1, param1 in params1:
+        if name1 in dict_params2:
+            try:
+                dict_params2[name1].data.copy_(param1.data)
+            except:
+                pass
+
