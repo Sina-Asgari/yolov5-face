@@ -33,7 +33,6 @@ from utils.google_utils import attempt_download
 from utils.loss import compute_loss
 from utils.plots import plot_images, plot_labels, plot_results, plot_evolution
 from utils.torch_utils import ModelEMA, select_device, intersect_dicts, torch_distributed_zero_first
-
 logger = logging.getLogger(__name__)
 
 try:
@@ -43,12 +42,15 @@ except ImportError:
     logger.info("Install Weights & Biases for experiment logging via 'pip install wandb' (recommended)")
 
 
-def train(hyp, opt, device, tb_writer=None, wandb=None, n_landmarks=5):
+def train(hyp, opt, device, tb_writer=None, wandb=None):
     logger.info(f'Hyperparameters {hyp}')
-    save_dir, epochs, batch_size, total_batch_size, weights, rank = \
-        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank
+    save_dir, epochs, batch_size, total_batch_size, weights, rank, n_landmarks= \
+        Path(opt.save_dir), opt.epochs, opt.batch_size, opt.total_batch_size, opt.weights, opt.global_rank, opt.n_landmarks
 
     # Directories
+    # save_dir: runs/train/exp
+    # wdir: runs/train/exp/weights
+
     wdir = save_dir / 'weights'
     wdir.mkdir(parents=True, exist_ok=True)  # make dir
     last = wdir / 'last.pt'
@@ -89,16 +91,37 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, n_landmarks=5):
         state_dict = intersect_dicts(state_dict, model.state_dict(), exclude=exclude)  # intersect
         model.load_state_dict(state_dict, strict=False)  # load
         logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
+    
+        if n_landmarks != 5:
+            print(Fore.RED + "inside train.py: n_landmarks != 5" + Fore.RESET)
+            model2 = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc, n_landmarks=10).to(device)
+            params1 = model.named_parameters()
+            params2 = model2.named_parameters()
+
+            dict_params2 = dict(params2)
+
+            for name1, param1 in params1:
+                if name1 in dict_params2:
+                    try:
+                        dict_params2[name1].data.copy_(param1.data)
+                    except:
+                        pass
+            model = model2
+            print(model)
     else:
         model = Model(opt.cfg, ch=3, nc=nc).to(device)  # create
+    
 
     # Freeze
-    freeze = []  # parameter names to freeze (full or partial)
-    for k, v in model.named_parameters():
-        v.requires_grad = True  # train all layers
-        if any(x in k for x in freeze):
-            print('freezing %s' % k)
-            v.requires_grad = False
+    if opt.freeze:
+        print("Freezing model weights")
+        freeze = [str(x) for x in range(0, 23)]  # parameter names to freeze (full or partial)
+        for k, v in model.named_parameters():
+            v.requires_grad = True  # train all layers
+            # if any(x in k for x in freeze):
+            if k.split(".")[1] in freeze:
+                print('freezing %s' % k)
+                v.requires_grad = False
 
     # Optimizer
     nbs = 64  # nominal batch size
@@ -328,7 +351,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None, n_landmarks=5):
         scheduler.step()
 
         # DDP process 0 or single-GPU
-        if rank in [-1, 0] and epoch > 20:
+        # if rank in [-1, 0] and epoch > 20:
+        if rank in [-1, 0]:
             # mAP
             if ema:
                 ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
@@ -459,6 +483,7 @@ if __name__ == '__main__':
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
     parser.add_argument('--n_landmarks', type=int, default=5, help='number of landmarks we want to detect in each face')
+    parser.add_argument('--freeze', action='store_true', help='freeze layers except Detector conv layers')
     opt = parser.parse_args()
 
     # Set DDP variables
@@ -584,7 +609,7 @@ if __name__ == '__main__':
                 hyp[k] = round(hyp[k], 5)  # significant digits
 
             # Train mutation
-            results = train(hyp.copy(), opt, device, wandb=wandb, n_landmarks=opt.n_landmarks)
+            results = train(hyp.copy(), opt, device, wandb=wandb)
 
             # Write mutation results
             print_mutation(hyp.copy(), results, yaml_file, opt.bucket)
