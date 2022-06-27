@@ -18,6 +18,9 @@ from utils.general import check_img_size, non_max_suppression_face, apply_classi
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized
 
+from fastapi import FastAPI
+import uvicorn
+app = FastAPI()
 
 def load_model(weights, device):
     model = attempt_load(weights, map_location=device)  # load FP32 model
@@ -130,15 +133,17 @@ def detect_one(model, image_path, device, n_landmarks=5):
                 n = (det[:, -1] == c).sum()  # detections per class
 
             det[:, 5:5+n_landmarks*2] = scale_coords_landmarks(img.shape[2:], det[:, 5:5+n_landmarks*2], orgimg.shape).round()
-
+            landmarks_ = []
             for j in range(det.size()[0]):
                 xyxy = det[j, :4].view(-1).tolist()
                 conf = det[j, 4].cpu().numpy()
                 landmarks = det[j, 5:5+n_landmarks*2].view(-1).tolist()
                 class_num = det[j, 5+n_landmarks*2].cpu().numpy()
                 orgimg = show_results(orgimg, xyxy, conf, landmarks, class_num)
+                landmarks_.append(landmarks)
 
     cv2.imwrite('result.jpg', orgimg)
+    return landmarks_
 
 
 
@@ -153,26 +158,23 @@ if __name__ == '__main__':
     print(opt)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(opt.weights, device)
-    detect_one(model, opt.image, device, n_landmarks=opt.n_landmark)
+    # detect_one(model, opt.image, device, n_landmarks=opt.n_landmark)
 
-    # from models.yolo import Model
-    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # model2 = Model(cfg='models/yolov5s.yaml', ch=3, nc=1, n_landmarks=10).to(device)
-    # detect_one(model2, opt.image, device, n_landmarks=5)
-    # image = "./data/images/bus.jpg"
-    # detect_one(model, image, device, n_landmarks=10)
+    @app.get('/')
+    async def get_landmarks(img_path: str = opt.image, n_landmarks: int = opt.n_landmark):
+        landmarks = detect_one(model, img_path, device, n_landmarks=n_landmarks)
+        # return {f"lx_{i//2}":landmarks[i] if i%2==0 else f"ly_{i//2}" for i in range(len(landmarks))}
+        lndmrks = {}
+        for j in range(len(landmarks)):
+            d = {}
+            for i in range(len(landmarks[j])):
+                if i%2==0:
+                    d[f"lx_{i//2}"] = landmarks[j][i]
+                else:
+                    d[f"ly_{i//2}"] = landmarks[j][i]
+            lndmrks[f"face_{j}"] = d
+        return lndmrks
 
+    uvicorn.run(app)
 
-    # # for copy wights except Detect    
-    # params1 = model.named_parameters()
-    # params2 = model2.named_parameters()
-
-    # dict_params2 = dict(params2)
-
-    # for name1, param1 in params1:
-    #     if name1 in dict_params2:
-    #         try:
-    #             dict_params2[name1].data.copy_(param1.data)
-    #         except:
-    #             pass
 
