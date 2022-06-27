@@ -93,7 +93,6 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         logger.info('Transferred %g/%g items from %s' % (len(state_dict), len(model.state_dict()), weights))  # report
     
         if n_landmarks != 5:
-            print(Fore.RED + "inside train.py: n_landmarks != 5" + Fore.RESET)
             model2 = Model(opt.cfg or ckpt['model'].yaml, ch=3, nc=nc, n_landmarks=10).to(device)
             params1 = model.named_parameters()
             params2 = model2.named_parameters()
@@ -107,11 +106,10 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                     except:
                         pass
             model = model2
-            print(model)
     else:
         model = Model(opt.cfg, ch=3, nc=nc).to(device)  # create
     
-
+    print(model)
     # Freeze
     if opt.freeze:
         print("Freezing model weights")
@@ -164,7 +162,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
 
     # Resume
     start_epoch, best_fitness = 0, 0.0
-    if pretrained:
+    if pretrained and n_landmarks == 5:
         # Optimizer
         if ckpt['optimizer'] is not None:
             optimizer.load_state_dict(ckpt['optimizer'])
@@ -210,7 +208,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
     dataloader, dataset = create_dataloader(train_path, imgsz, batch_size, gs, opt,
                                             hyp=hyp, augment=True, cache=opt.cache_images, rect=opt.rect, rank=rank,
                                             world_size=opt.world_size, workers=opt.workers,
-                                            image_weights=opt.image_weights)
+                                            image_weights=opt.image_weights, n_landmarks=opt.n_landmarks)
     mlc = np.concatenate(dataset.labels, 0)[:, 0].max()  # max label class
     nb = len(dataloader)  # number of batches
     assert mlc < nc, 'Label class %g exceeds nc=%g in %s. Possible class labels are 0-%g' % (mlc, nc, opt.data, nc - 1)
@@ -220,7 +218,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         ema.updates = start_epoch * nb // accumulate  # set EMA updates
         testloader = create_dataloader(test_path, imgsz_test, total_batch_size, gs, opt,  # testloader
                                        hyp=hyp, cache=opt.cache_images and not opt.notest, rect=True,
-                                       rank=-1, world_size=opt.world_size, workers=opt.workers, pad=0.5)[0]
+                                       rank=-1, world_size=opt.world_size, workers=opt.workers, pad=0.5, n_landmarks=opt.n_landmarks)[0]
 
         if not opt.resume:
             labels = np.concatenate(dataset.labels, 0)
@@ -353,6 +351,7 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
         # DDP process 0 or single-GPU
         # if rank in [-1, 0] and epoch > 20:
         if rank in [-1, 0]:
+            
             # mAP
             if ema:
                 ema.update_attr(model, include=['yaml', 'nc', 'hyp', 'gr', 'names', 'stride', 'class_weights'])
@@ -366,7 +365,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                                                  dataloader=testloader,
                                                  save_dir=save_dir,
                                                  plots=False,
-                                                 log_imgs=opt.log_imgs if wandb else 0)
+                                                 log_imgs=opt.log_imgs if wandb else 0,
+                                                 n_landmarks=n_landmarks)
 
             # Write
             with open(results_file, 'a') as f:
@@ -389,10 +389,11 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
             fi = fitness(np.array(results).reshape(1, -1))  # weighted combination of [P, R, mAP@.5, mAP@.5-.95]
             if fi > best_fitness:
                 best_fitness = fi
-
+            
             # Save model
             save = (not opt.nosave) or (final_epoch and not opt.evolve)
             if save:
+                print("Saving models to disk...")
                 with open(results_file, 'r') as f:  # create checkpoint
                     ckpt = {'epoch': epoch,
                             'best_fitness': best_fitness,
@@ -406,6 +407,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                 if best_fitness == fi:
                     torch.save(ckpt, best)
                 del ckpt
+                
+
         # end epoch ----------------------------------------------------------------------------------------------------
     # end training
 
@@ -442,7 +445,8 @@ def train(hyp, opt, device, tb_writer=None, wandb=None):
                                           dataloader=testloader,
                                           save_dir=save_dir,
                                           save_json=save_json,
-                                          plots=False)
+                                          plots=False,
+                                          n_landmarks=n_landmarks)
 
     else:
         dist.destroy_process_group()

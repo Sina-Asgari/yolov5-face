@@ -36,8 +36,9 @@ def test(data,
          save_hybrid=False,  # for hybrid auto-labelling
          save_conf=False,  # save auto-label confidences
          plots=True,
-         log_imgs=0):  # number of logged images
-
+         log_imgs=0,
+         n_landmarks=5):  # number of logged images
+    print(f'n_landmarks: {n_landmarks}')
     # Initialize/load model and set device
     training = model is not None
     if training:  # called by train.py
@@ -111,19 +112,19 @@ def test(data,
 
             # Compute loss
             if training:
-                loss += compute_loss([x.float() for x in train_out], targets, model)[1][:3]  # box, obj, cls
+                loss += compute_loss([x.float() for x in train_out], targets, model, n_landmarks=n_landmarks)[1][:3]  # box, obj, cls
 
             # Run NMS
             targets[:, 2:6] *= torch.Tensor([width, height, width, height]).to(device)  # to pixels
             lb = [targets[targets[:, 0] == i, 1:] for i in range(nb)] if save_hybrid else []  # for autolabelling
             t = time_synchronized()
             #output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb)
-            output = non_max_suppression_face(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb)
+            output = non_max_suppression_face(inf_out, conf_thres=conf_thres, iou_thres=iou_thres, labels=lb, n_landmarks=n_landmarks)
             t1 += time_synchronized() - t
 
         # Statistics per image
         for si, pred in enumerate(output):
-            pred = torch.cat((pred[:, :5], pred[:, 15:]), 1) # throw landmark in thresh
+            pred = torch.cat((pred[:, :5], pred[:, 5+n_landmarks*2:]), 1) # throw landmark in thresh
             labels = targets[targets[:, 0] == si, 1:]
             nl = len(labels)
             tcls = labels[:, 0].tolist() if nl else []  # target class
@@ -300,6 +301,7 @@ if __name__ == '__main__':
     parser.add_argument('--project', default='runs/test', help='save to project/name')
     parser.add_argument('--name', default='exp', help='save to project/name')
     parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
+    parser.add_argument('--n_landmarks', type=int, default=5, help='number of landmarks we want to detect in each face')
     opt = parser.parse_args()
     opt.save_json |= opt.data.endswith('coco.yaml')
     opt.data = check_file(opt.data)  # check file
@@ -319,6 +321,7 @@ if __name__ == '__main__':
              save_txt=opt.save_txt | opt.save_hybrid,
              save_hybrid=opt.save_hybrid,
              save_conf=opt.save_conf,
+             n_landmarks=opt.n_landmarks,
              )
 
     elif opt.task == 'study':  # run over a range of settings and save/plot

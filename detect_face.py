@@ -148,29 +148,31 @@ if __name__ == '__main__':
     parser.add_argument('--weights', nargs='+', type=str, default='runs/train/exp5/weights/last.pt', help='model.pt path(s)')
     parser.add_argument('--image', type=str, default='data/images/test.jpg', help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+    parser.add_argument('--n_landmark', type=int, default=5, help='number of landmarks')
     opt = parser.parse_args()
     print(opt)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(opt.weights, device)
-    detect_one(model, opt.image, device, n_landmarks=5)
+    detect_one(model, opt.image, device, n_landmarks=opt.n_landmark)
 
-    from models.yolo import Model
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model2 = Model(cfg='models/yolov5s.yaml', ch=3, nc=1, n_landmarks=10).to(device)
+    # from models.yolo import Model
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # model2 = Model(cfg='models/yolov5s.yaml', ch=3, nc=1, n_landmarks=10).to(device)
+    # detect_one(model2, opt.image, device, n_landmarks=5)
     # image = "./data/images/bus.jpg"
     # detect_one(model, image, device, n_landmarks=10)
 
 
-    # for copy wights except Detect    
-    params1 = model.named_parameters()
-    params2 = model2.named_parameters()
+    # # for copy wights except Detect    
+    # params1 = model.named_parameters()
+    # params2 = model2.named_parameters()
 
-    dict_params2 = dict(params2)
+    # dict_params2 = dict(params2)
 
-    for name1, param1 in params1:
-        if name1 in dict_params2:
-            try:
-                dict_params2[name1].data.copy_(param1.data)
-            except:
-                pass
+    # for name1, param1 in params1:
+    #     if name1 in dict_params2:
+    #         try:
+    #             dict_params2[name1].data.copy_(param1.data)
+    #         except:
+    #             pass
 

@@ -42,11 +42,40 @@ class WiderFaceDetection(data.Dataset):
         height, width, _ = img.shape
 
         labels = self.words[index]
-        annotations = np.zeros((0, 15))
+        
+        # if not self._10_landmark:
+        #     annotations = np.zeros((0, 15))
+        #     if len(labels) == 0:
+        #         return annotations
+        #     for idx, label in enumerate(labels):
+        #         annotation = np.zeros((1, 15))
+        #         # bbox
+        #         annotation[0, 0] = label[0]  # x1
+        #         annotation[0, 1] = label[1]  # y1
+        #         annotation[0, 2] = label[0] + label[2]  # x2
+        #         annotation[0, 3] = label[1] + label[3]  # y2
+
+        #         # landmarks
+        #         annotation[0, 4] = label[4]    # l0_x
+        #         annotation[0, 5] = label[5]    # l0_y
+        #         annotation[0, 6] = label[7]    # l1_x
+        #         annotation[0, 7] = label[8]    # l1_y
+        #         annotation[0, 8] = label[10]   # l2_x
+        #         annotation[0, 9] = label[11]   # l2_y
+        #         annotation[0, 10] = label[13]  # l3_x
+        #         annotation[0, 11] = label[14]  # l3_y
+        #         annotation[0, 12] = label[16]  # l4_x
+        #         annotation[0, 13] = label[17]  # l4_y
+        #         if annotation[0, 4] < 0:
+        #             annotation[0, 14] = -1
+        #         else:
+        #             annotation[0, 14] = 1
+            
+        annotations = np.zeros((0, 25))
         if len(labels) == 0:
             return annotations
         for idx, label in enumerate(labels):
-            annotation = np.zeros((1, 15))
+            annotation = np.zeros((1, 25))
             # bbox
             annotation[0, 0] = label[0]  # x1
             annotation[0, 1] = label[1]  # y1
@@ -64,10 +93,29 @@ class WiderFaceDetection(data.Dataset):
             annotation[0, 11] = label[14]  # l3_y
             annotation[0, 12] = label[16]  # l4_x
             annotation[0, 13] = label[17]  # l4_y
+
+            annotation[0, 14] = (annotation[0, 4] + annotation[0, 6]) / 2 #l5_x = (l0_x + l1_x) / 2
+            annotation[0, 15] = (annotation[0, 5] + annotation[0, 7]) / 2 #l5_y = (l0_y + l1_y) / 2
+
+            annotation[0, 16] = (annotation[0, 4] + annotation[0, 8]) / 2 #l6_x = (l0_x + l2_x) / 2
+            annotation[0, 17] = (annotation[0, 5] + annotation[0, 9]) / 2 #l6_y = (l0_y + l2_y) / 2
+
+            annotation[0, 18] = (annotation[0, 4] + annotation[0, 10]) / 2 #l7_x = (l0_x + l3_x) / 2
+            annotation[0, 19] = (annotation[0, 5] + annotation[0, 11]) / 2 #l7_y = (l0_y + l3_y) / 2
+
+            annotation[0, 20] = (annotation[0, 4] + annotation[0, 12]) / 2 #l8_x = (l0_x + l4_x) / 2
+            annotation[0, 21] = (annotation[0, 5] + annotation[0, 13]) / 2 #l8_y = (l0_y + l4_y) / 2
+
+            annotation[0, 22] = (annotation[0, 8] + annotation[0, 10]) / 2 #l9_x = l2_x + l3_x) / 2
+            annotation[0, 23] = (annotation[0, 9] + annotation[0, 11]) / 2 #l9_y = l2_y + l3_y) / 2
+            
+
             if annotation[0, 4] < 0:
-                annotation[0, 14] = -1
+                annotation[0, 24] = -1
             else:
-                annotation[0, 14] = 1
+                annotation[0, 24] = 1    
+
+
 
             annotations = np.append(annotations, annotation, axis=0)
         target = np.array(annotations)
@@ -130,7 +178,7 @@ if __name__ == '__main__':
     aa = WiderFaceDetection(os.path.join(original_path, 'label.txt'))
 
     for i in range(len(aa.imgs_path)):
-        print(i, aa.imgs_path[i])
+        # print(i, aa.imgs_path[i])
         img = cv2.imread(aa.imgs_path[i])
         base_img = os.path.basename(aa.imgs_path[i])
         base_txt = os.path.basename(aa.imgs_path[i])[:-4] + ".txt"
@@ -139,11 +187,11 @@ if __name__ == '__main__':
         with open(save_txt_path, "w") as f:
             height, width, _ = img.shape
             labels = aa.words[i]
-            annotations = np.zeros((0, 14))
+            annotations = np.zeros((0, 24))
             if len(labels) == 0:
                 continue
             for idx, label in enumerate(labels):
-                annotation = np.zeros((1, 14))
+                annotation = np.zeros((1, 24))
                 # bbox
                 label[0] = max(0, label[0])
                 label[1] = max(0, label[1])
@@ -167,6 +215,24 @@ if __name__ == '__main__':
                 annotation[0, 11] = label[14] / height  # l3_y
                 annotation[0, 12] = label[16] / width  # l4_x
                 annotation[0, 13] = label[17] / height  # l4_y
+
+                annotation[0, 14] = (annotation[0, 4] + annotation[0, 6]) / 2 #l5_x = (l0_x + l1_x) / 2
+                annotation[0, 15] = (annotation[0, 5] + annotation[0, 7]) / 2 #l5_y = (l0_y + l1_y) / 2
+
+                annotation[0, 16] = (annotation[0, 4] + annotation[0, 8]) / 2 #l6_x = (l0_x + l2_x) / 2
+                annotation[0, 17] = (annotation[0, 5] + annotation[0, 9]) / 2 #l6_y = (l0_y + l2_y) / 2
+
+                annotation[0, 18] = (annotation[0, 4] + annotation[0, 10]) / 2 #l7_x = (l0_x + l3_x) / 2
+                annotation[0, 19] = (annotation[0, 5] + annotation[0, 11]) / 2 #l7_y = (l0_y + l3_y) / 2
+
+                annotation[0, 20] = (annotation[0, 4] + annotation[0, 12]) / 2 #l8_x = (l0_x + l4_x) / 2
+                annotation[0, 21] = (annotation[0, 5] + annotation[0, 13]) / 2 #l8_y = (l0_y + l4_y) / 2
+
+                annotation[0, 22] = (annotation[0, 8] + annotation[0, 10]) / 2 #l9_x = l2_x + l3_x) / 2
+                annotation[0, 23] = (annotation[0, 9] + annotation[0, 11]) / 2 #l9_y = l2_y + l3_y) / 2
+
+
+
                 str_label = "0 "
                 for i in range(len(annotation[0])):
                     str_label = str_label + " " + str(annotation[0][i])

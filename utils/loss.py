@@ -216,7 +216,7 @@ def build_targets(p, targets, model, n_landmarks=5):
         anchors = det.anchors[i]
         gain[2:6] = torch.tensor(p[i].shape)[[3, 2, 3, 2]]  # xyxy gain
         #landmarks 10
-        gain[6:6+(n_landmarks*2)] = torch.tensor(p[i].shape)[[3, 2, 3, 2, 3, 2, 3, 2, 3, 2]]  # xyxy gain
+        gain[6:6+(n_landmarks*2)] = torch.tensor(p[i].shape)[[3, 2]*n_landmarks]  # xyxy gain
 
         # Match targets to anchors
         t = targets * gain
